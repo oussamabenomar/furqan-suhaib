@@ -4346,7 +4346,7 @@ def day_pdf(day, rows, cnt, davg, stars):
 
 def summary_tab():
     sec("ملخص الحلقة")
-    st.caption(f"كل ما سُجّل في الحلقة من حفظ ({DIR_N}) ومراجعة (الشيخان) وحضور وانضباط، مع ترتيب الشهر، لتلقي نتائجها على الطلبة.")
+    st.caption(f"كل ما سُجّل في الحلقة من حفظ ومراجعة ({DIR_N}) وحضور وانضباط، مع ترتيب الشهر، لتلقي نتائجها على الطلبة." if SOLO else f"كل ما سُجّل في الحلقة من حفظ ({DIR_N}) ومراجعة (الشيخان) وحضور وانضباط، مع ترتيب الشهر، لتلقي نتائجها على الطلبة.")
     day = st.date_input("يوم الحلقة", value=now().date(), key="sumd").isoformat()
     rows, cnt, davg, stars = day_data(day)
     if not rows:
