@@ -2845,16 +2845,28 @@ def sug_tab(i):
             st.markdown(f'<div class="note">{esc(r["text"]).replace(chr(10), "<br>")}</div>', unsafe_allow_html=True)
             if r.get("reply"):
                 st.markdown(f'<div class="pay ok">الرد: {esc(r["reply"])}</div>', unsafe_allow_html=True)
+            own = r.get("sec", "") == SEC and r["who"] == me["n"]
+            if own or admin:
+                nt = st.text_area("نص الاقتراح (يمكنك تعديله)", value=r["text"], max_chars=600, height=90, key=f"sgt{r['id']}")
             if admin:
                 c1, c2 = st.columns(2)
                 ns = c1.selectbox("الحالة", list(SUG_ST), index=list(SUG_ST).index(stt), format_func=SUG_ST.get, key=f"sgs{r['id']}")
                 nr = c2.text_input("رد قصير (اختياري)", value=r.get("reply", ""), key=f"sgr{r['id']}", max_chars=200)
+            if own or admin:
                 b1, b2 = st.columns(2)
                 if b1.button("حفظ", key=f"sgk{r['id']}"):
-                    sug_write("update", r["id"], {"status": ns, "reply": nr.strip()})
-                    st.rerun()
+                    if len(nt.strip()) < 5:
+                        st.warning("اكتب الاقتراح بوضوح (5 أحرف على الأقل).")
+                    else:
+                        ch = {"text": nt.strip()}
+                        if admin:
+                            ch.update({"status": ns, "reply": nr.strip()})
+                        sug_write("update", r["id"], ch)
+                        audit("تعديل اقتراح", nt.strip()[:60])
+                        st.rerun()
                 if b2.button("حذف", key=f"sgd{r['id']}"):
                     sug_write("delete", r["id"])
+                    audit("حذف اقتراح", r["text"][:60])
                     st.rerun()
     if admin:
         open_ = [r for r in rows if r.get("status", "") in ("", "study")]
