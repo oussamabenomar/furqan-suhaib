@@ -23,7 +23,35 @@ def _section_cfg():
         return {}
 
 
-_SC = _section_cfg()
+def _all_sections():
+    """وضع الأقسام المتعددة: Secrets فيها [sections.<مفتاح>] لكل قسم. بدونها يعمل التطبيق لقسم واحد."""
+    try:
+        return {str(k): dict(v) for k, v in dict(st.secrets["sections"]).items()}
+    except Exception:
+        return {}
+
+
+def _default_key():
+    try:
+        return str(st.secrets["general"]["default_section"])
+    except Exception:
+        return ""
+
+
+SECS = _all_sections()
+MULTI = bool(SECS)
+SECKEY = ""
+GENERIC = False  # وضع الأقسام المتعددة قبل معرفة القسم (صفحة الدخول أو اختيار الأولياء للقسم)
+if MULTI:
+    _q = st.query_params
+    if _q.get("v") == "p":
+        SECKEY = _q.get("s") if _q.get("s") in SECS else (_default_key() if _default_key() in SECS else "")
+    else:
+        SECKEY = st.session_state.get("sec_key", "") if st.session_state.get("sec_key", "") in SECS else ""
+    GENERIC = not SECKEY
+    _SC = SECS[SECKEY] if SECKEY else {"name": "منصة متابعة الطلبة", "director": "—", "sheikh1": "—", "sheikh2": "—", "user0": "_u0", "user1": "_u1", "user2": "_u2"}
+else:
+    _SC = _section_cfg()
 SEC = _SC.get("name", "القسم الابتدائي")  # اسم القسم
 ASSOC = _SC.get("assoc", "جمعية الفرقان لتعليم القرآن")
 CITY = _SC.get("city", "دار البيضاء")
@@ -31,10 +59,19 @@ DIR_N = _SC.get("director", "الشيخ أسامة")  # مدير القسم وش
 REV1_N = _SC.get("sheikh1", "الشيخ هارون")
 REV2_N = _SC.get("sheikh2", "الشيخ حذيفة")
 U0, U1, U2 = _SC.get("user0", "osama"), _SC.get("user1", "haroun"), _SC.get("user2", "houdhayfa")
-SEEDED = not _SC  # قوائم الأسماء الأولية خاصة بالقسم الابتدائي
+SEEDED = (str(_SC.get("seeded", "")).strip() in ("1", "true", "yes")) if MULTI else not _SC  # قوائم الأسماء الأولية خاصة بالقسم الابتدائي
 SOLO = str(_SC.get("solo", "")).strip() in ("1", "true", "yes")  # شيخ واحد يجمع الحفظ والمراجعة (لا شيوخ مراجعة آخرون)
 if SOLO:
     U1 = U2 = U0
+
+
+def app_link():
+    """رابط صفحة الأولياء (في الأقسام المتعددة يحمل مفتاح القسم)."""
+    try:
+        base = str(st.secrets["app_url"]).rstrip("/")
+    except Exception:
+        base = ""
+    return base + "/?v=p" + (f"&s={SECKEY}" if MULTI else "")
 
 
 def short_n(n):
@@ -61,6 +98,7 @@ HEAD = {
     "att": ["id", "sid", "date", "status", "teacher", "why", "by"],
     "pre": ["id", "sid", "date", "why", "ts"],
     "pay": ["id", "sid", "month", "amount", "date", "teacher"],
+    "sug": ["id", "ts", "sec", "who", "text", "status", "reply"],
 }
 
 TEACHERS = [
@@ -72,19 +110,20 @@ if SOLO:  # حساب واحد بدورين: الحفظ والمراجعة، يب
     TEACHERS = [TEACHERS[0], {"n": DIR_N, "r": "مراجعة", "t": "mur", "u": U0, "admin": True, "alias": True}]
 STAFF = [t for t in TEACHERS if not t.get("alias")]
 # بصمات الرموز السرية (SHA-256). يمكن تغييرها من Secrets دون لمس الكود: [staff] osama="..."
-DEFAULT_HASHES = {} if _SC else {
+_OSAMA_HASHES = {
     "osama": "8d21a129d727d17ab7f7c08bcd3ec5751b636b281dbdb8d453a66a41eb8ef1b4",
     "haroun": "5f83a1a0fbbffbed5626ecb428010ce8edb203aeaf4d02ac3fe930914001e2fc",
     "houdhayfa": "f740c467927dd4af113e04370b11d4217ccfefb896a9fae8de43a5b669eb58f3",
 }
+DEFAULT_HASHES = _OSAMA_HASHES if SEEDED else {}
 WEEK_START = 5  # بداية الأسبوع: السبت (الاثنين=0 ... السبت=5 ... الأحد=6)
 GRADES = ["ممتاز", "جيد جدا", "جيد", "متوسط", "يحتاج إعادة"]
 GRADES_H = GRADES + ["لم يحفظ"]  # «لم يحفظ»: لا مقدار جديد في تلك الحلقة
 HK = {"new": "حفظ جديد (مقطع جديد)", "rep": "تكرار (تجميع السورة بعد تقسيمها)", "old": "إعادة قديمة"}  # يُحتسب الجديد وحده في التقدم
 DAYS = {"sat": ("السبت", 5), "sun": ("الأحد", 6), "tue": ("الثلاثاء", 1), "wed": ("الأربعاء", 2)}  # أيام الحفظ مع شيخ الحفظ (weekday: الاثنين=0)
-SUN_NAMES = [] if _SC else ["بن بثرة ياسر", "مبدوعة عبد الرحيم", "ربحاوي عبد الرؤوف", "حجاب ادريس", "قبلي آدم", "راجعي وسيم",
+SUN_NAMES = [] if not SEEDED else ["بن بثرة ياسر", "مبدوعة عبد الرحيم", "ربحاوي عبد الرؤوف", "حجاب ادريس", "قبلي آدم", "راجعي وسيم",
              "أوراري يوسف", "توم ابراهيم", "الساحلي جعفر", "والي أسامة", "واعر أكرم", "بوراس آدم", "حسيد أنيس"]
-WED_NAMES = [] if _SC else ["حميدو عبد الباري", "زرور مهدي", "طمار أمين", "بوشامة عبد الرؤوف", "قبلي هيثم", "بوغطان عبد الهادي",
+WED_NAMES = [] if not SEEDED else ["حميدو عبد الباري", "زرور مهدي", "طمار أمين", "بوشامة عبد الرؤوف", "قبلي هيثم", "بوغطان عبد الهادي",
              "صافري علي", "والي أنس", "زارب عماد", "لعصيص مصعب", "حسيد أنيس"]
 MDAYS = {"sat": ("السبت", 5), "sun": ("الأحد", 6), "tue": ("الثلاثاء", 1), "wed": ("الأربعاء", 2)}  # أيام المراجعة
 MFOJ = {"A": "sat,tue", "B": "sun,wed"}  # الفوج الأول: السبت والثلاثاء، الفوج الثاني: الأحد والأربعاء
@@ -232,9 +271,10 @@ class LocalStore:
 class SheetsStore:
     """التخزين الدائم في Google Sheets. يتبع أعمدة الجدول الفعلية بأسمائها ويضيف الناقص منها."""
 
-    def __init__(self, gc, url):
+    def __init__(self, gc, url, names=None):
         self.sh = gc.open_by_url(url)
         self._w, self._h = {}, {}
+        self.names = list(names) if names else None  # أوراق محددة فقط (للجدول المركزي)
 
     def _open(self, n):
         import gspread
@@ -262,10 +302,10 @@ class SheetsStore:
     def _fetch_all(self):
         """يقرأ كل الأوراق بطلب واحد إلى Google بدل طلب لكل ورقة (أسرع بكثير وأخف على حدّ 60 طلبا في الدقيقة)."""
         if not getattr(self, "_ok", False):
-            for n in HEAD:  # يضمن وجود كل ورقة وأعمدتها
+            for n in (self.names or HEAD):  # يضمن وجود كل ورقة وأعمدتها
                 self._open(n)
             self._ok = True
-        names = list(HEAD)
+        names = list(self.names or HEAD)
         res = self.sh.values_batch_get([f"'{n}'" for n in names])
         out = {}
         for n, vr in zip(names, res.get("valueRanges", [])):
@@ -424,32 +464,71 @@ def _sheets_store(url, sa_json):
     return SheetsStore(gspread.service_account_from_dict(json.loads(sa_json)), url)
 
 
+@st.cache_resource
+def _central_store(url, sa_json):
+    import json
+
+    import gspread
+
+    return SheetsStore(gspread.service_account_from_dict(json.loads(sa_json)), url, names=["sug"])
+
+
+def _central():
+    """جدول الاقتراحات المركزي المشترك بين الأقسام (اختياري: central_sheet_url في Secrets). بدونه تبقى الاقتراحات في جدول القسم."""
+    try:
+        url = str(st.secrets["central_sheet_url"]).strip()
+    except Exception:
+        return None
+    if not url:
+        return None
+    if url.startswith("local:"):  # للاختبارات
+        return LocalStore(url[6:])
+    try:
+        import json
+
+        sa = {k: str(v) for k, v in dict(st.secrets["gcp_service_account"]).items()}
+        return _central_store(url, json.dumps(sa))
+    except Exception as e:
+        st.session_state["_central_err"] = f"{type(e).__name__}"
+        return None
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _cload(sk=""):
+    c = _central()
+    return c.list("sug") if c is not None else []
+
+
+def _local():
+    return LocalStore(os.path.join(HERE, "data", SECKEY)) if MULTI else LocalStore()
+
+
 def get_store():
     """يعيد (المخزن، دائم؟، سبب الوضع التجريبي). لا يخزّن الوضع التجريبي أبداً في الذاكرة المؤقتة."""
     import json
 
     try:
         sa = {k: str(v) for k, v in dict(st.secrets["gcp_service_account"]).items()}
-        url = str(st.secrets["sheet_url"])
+        url = str(_SC.get("sheet_url") or st.secrets["sheet_url"]) if MULTI else str(st.secrets["sheet_url"])
     except KeyError:
-        return LocalStore(), False, "ينقص في Secrets قسم [gcp_service_account] أو السطر sheet_url"
+        return _local(), False, "ينقص في Secrets قسم [gcp_service_account] أو السطر sheet_url"
     except Exception as e:
         if type(e).__name__ == "StreamlitSecretNotFoundError":
-            return LocalStore(), False, "لم يجد التطبيق أي Secrets محفوظة"
+            return _local(), False, "لم يجد التطبيق أي Secrets محفوظة"
         st.error(f"خطأ في قراءة Secrets ({type(e).__name__}). غالباً علامة تنصيص ناقصة أو سطر مكسور.")
         st.stop()
     return _sheets_store(url, json.dumps(sa)), True, ""
 
 
 try:
-    STORE, PERSISTENT, LOCAL_REASON = get_store()
+    STORE, PERSISTENT, LOCAL_REASON = (None, True, "") if GENERIC else get_store()
 except Exception as e:  # الإعدادات موجودة لكن الاتصال فشل: لا نعمل ببيانات مؤقتة أبداً
     st.error(f"تعذّر الاتصال بجدول Google Sheets ({type(e).__name__}): {str(e)[:200]}")
     st.stop()
 
 
 @st.cache_data(ttl=30, show_spinner=False)
-def _load(n):
+def _load(n, sk=""):
     return STORE.list(n)
 
 
@@ -467,7 +546,7 @@ def explain(e):
 
 def load(n):
     try:
-        return _load(n)
+        return _load(n, SECKEY)
     except Exception as e:
         st.error(f"تعذّرت قراءة الورقة «{n}» من Google Sheets — {explain(e)}")
         st.stop()
@@ -1781,7 +1860,7 @@ def month_summary(stu, mo, bundle, with_pin=True):
         "نرجو متابعته في المراجعة والورد اليومي والحفظ، وعدم التغيب عن الحلقة إلا بعذر.",
     ]
     if app:
-        parts.append(f"للتفاصيل وتحميل التقرير (PDF): {app}/?v=p" + (f"&k={stu['pin']}" if with_pin and stu.get("pin") else "") + (f"\nالرمز السري: {stu['pin']}" if with_pin and stu.get("pin") else ""))
+        parts.append(f"للتفاصيل وتحميل التقرير (PDF): {app_link()}" + (f"&k={stu['pin']}" if with_pin and stu.get("pin") else "") + (f"\nالرمز السري: {stu['pin']}" if with_pin and stu.get("pin") else ""))
     return "\n".join(p for p in parts if p)
 
 
@@ -1939,7 +2018,7 @@ def _wrap(draw, text, font, maxw):
 
 
 @st.cache_data(show_spinner=False, max_entries=80)
-def joy_png(name, line1, dua="بارك الله فيه وزاده حرصا وتوفيقا"):
+def joy_png(name, line1, dua="بارك الله فيه وزاده حرصا وتوفيقا", sk=""):
     """بطاقة فرحة للمشاركة (صورة PNG 1080×1350) بشعار الجمعية."""
     import math
     from PIL import Image, ImageDraw, ImageFont
@@ -2008,7 +2087,7 @@ def joy_png(name, line1, dua="بارك الله فيه وزاده حرصا وت�
 def joy_card_ui(name, line1, key):
     """يعرض البطاقة مع زر التنزيل."""
     try:
-        png = joy_png(name, line1)
+        png = joy_png(name, line1, sk=SECKEY)
     except Exception as e:
         st.error(f"تعذّر إنشاء البطاقة: {e}")
         return
@@ -2033,7 +2112,7 @@ def joy_staff_ui(students):
             v = month_bundle(pm)[0].get(stu["id"])
             opts += [(badge_line(tx), f"وسام {month_label(pm)} — {tx}") for _ic, tx in (v or {}).get("badges", [])]
         try:
-            ww = week_winner()
+            ww = week_winner(sk=SECKEY)
         except Exception:
             ww = None
         if ww and ww["sid"] == stu["id"]:
@@ -2056,7 +2135,7 @@ def last_week_range(day=None):
 
 
 @st.cache_data(ttl=120, show_spinner=False)
-def week_winner(day=None):
+def week_winner(day=None, sk=""):
     """طالب الأسبوع: الأكثر تحسنا عن معدّله هو (متوسط أسابيعه الثلاثة السابقة)، لا الأعلى نقاطا."""
     lo, hi = last_week_range(day)
     students, logs, att, disc, exams = (load(n) for n in ("students", "logs", "att", "disc", "exams"))
@@ -2087,7 +2166,7 @@ def week_label(rng):
 
 def week_ui():
     try:
-        ww = week_winner()
+        ww = week_winner(sk=SECKEY)
     except Exception as e:
         st.caption(f"تعذّر حساب طالب الأسبوع: {e}")
         return
@@ -2386,7 +2465,7 @@ CURVE_WEEKS = 8
 
 
 @st.cache_data(ttl=120, show_spinner=False)
-def weekly_curve(n=CURVE_WEEKS, day=None):
+def weekly_curve(n=CURVE_WEEKS, day=None, sk=""):
     """نقاط كل طالب (من 100) في آخر n أسبوعا منتهيا (سبت–جمعة): {معرّف: [{lo, score|None}]}."""
     lo0, hi0 = last_week_range(day)
     students, logs, att, disc, exams = (load(k) for k in ("students", "logs", "att", "disc", "exams"))
@@ -2444,7 +2523,7 @@ def curve_html(pts):
 
 def curve_ui(sid):
     try:
-        pts = weekly_curve().get(sid, [])
+        pts = weekly_curve(sk=SECKEY).get(sid, [])
     except Exception as e:
         st.caption(f"تعذّر رسم المنحنى: {e}")
         return
@@ -2706,6 +2785,83 @@ def att_tab(i):
                 audit("حضور جماعي", f"{day}: {len(add)} جديد، {len(upd)} معدَّل")
             st.toast(f"✓ تم الحفظ ({len(add)} جديد، {len(upd)} معدَّل)")
             st.rerun()
+
+
+SUG_ST = {"": "جديد", "study": "قيد الدراسة", "done": "نُفّذ", "no": "غير مناسب"}
+
+
+def sug_tab(i):
+    me = TEACHERS[i]
+    admin = me.get("admin")
+    gen_u = str(secret("general_user", "osama" if SEEDED else "")).strip().lower()
+    general = bool(gen_u) and me["u"] == gen_u  # المدير العام: يرى اقتراحات كل الأقسام
+    cen = _central()
+    store = cen if cen is not None else STORE
+
+    def sug_write(fn, *a):
+        r = getattr(store, fn)("sug", *a)
+        _load.clear()
+        _cload.clear()
+        return r
+
+    sec("اقتراحات لتحسين الموقع")
+    if general:
+        _cap = "هنا تصلك اقتراحات كل الأقسام ومديريها، ويمكنك إرسال اقتراحاتك أيضا."
+    elif cen is not None:
+        _cap = "اكتب أي فكرة تسهّل عملك في الحلقة أو تفيد الطلبة والأولياء، فتصل إلى مدير القسم والمدير العام."
+    else:
+        _cap = "اكتب أي فكرة تسهّل عملك في الحلقة أو تفيد الطلبة والأولياء، فتصل إلى مدير القسم."
+    st.caption(_cap)
+    if cen is None and st.session_state.get("_central_err"):
+        st.warning("تعذّر الاتصال بجدول الاقتراحات المشترك، فتُحفظ اقتراحاتك مؤقتا في جدول قسمك فقط.")
+    with st.form(f"sugf{i}", clear_on_submit=True):
+        txt = st.text_area("اقتراحك", max_chars=600, height=110, placeholder="مثال: أريد أن يظهر لي كذا… أو أن يُضاف زر كذا…")
+        ok = st.form_submit_button("إرسال الاقتراح", type="primary")
+    if ok:
+        if len(txt.strip()) < 5:
+            st.warning("اكتب الاقتراح بوضوح (5 أحرف على الأقل).")
+        else:
+            sug_write("add", {"ts": stamp(), "sec": SEC, "who": me["n"], "text": txt.strip(), "status": "", "reply": ""})
+            audit("اقتراح لتحسين الموقع", txt.strip()[:80])
+            st.success("✓ وصل اقتراحك، جزاك الله خيرا.")
+    allr = _cload(SECKEY) if cen is not None else load("sug")
+    if general:
+        rows = allr
+    elif admin:
+        rows = [r for r in allr if r.get("sec", "") == SEC]
+    else:
+        rows = [r for r in allr if r.get("sec", "") == SEC and r["who"] == me["n"]]
+    rows = sorted(rows, key=lambda r: (r["ts"], r["id"]), reverse=True)
+    if not rows:
+        st.caption("لا اقتراحات بعد." if admin else "لم ترسل اقتراحات بعد.")
+        return
+    sec("كل الاقتراحات" if admin else "اقتراحاتي")
+    for r in rows[:60]:
+        stt = r.get("status", "") if r.get("status", "") in SUG_ST else ""
+        head = f"{r['ts'][:16]} · {SUG_ST[stt]}"
+        if admin:
+            head = (f"{r.get('sec', '')} · " if general else "") + f"{r['who']} · " + head
+        with st.expander(head):
+            st.markdown(f'<div class="note">{esc(r["text"]).replace(chr(10), "<br>")}</div>', unsafe_allow_html=True)
+            if r.get("reply"):
+                st.markdown(f'<div class="pay ok">الرد: {esc(r["reply"])}</div>', unsafe_allow_html=True)
+            if admin:
+                c1, c2 = st.columns(2)
+                ns = c1.selectbox("الحالة", list(SUG_ST), index=list(SUG_ST).index(stt), format_func=SUG_ST.get, key=f"sgs{r['id']}")
+                nr = c2.text_input("رد قصير (اختياري)", value=r.get("reply", ""), key=f"sgr{r['id']}", max_chars=200)
+                b1, b2 = st.columns(2)
+                if b1.button("حفظ", key=f"sgk{r['id']}"):
+                    sug_write("update", r["id"], {"status": ns, "reply": nr.strip()})
+                    st.rerun()
+                if b2.button("حذف", key=f"sgd{r['id']}"):
+                    sug_write("delete", r["id"])
+                    st.rerun()
+    if admin:
+        open_ = [r for r in rows if r.get("status", "") in ("", "study")]
+        if open_:
+            sec("نص الاقتراحات المفتوحة للنسخ")
+            st.caption("انسخه وأرسله لمن يطوّر الموقع.")
+            st.code("\n\n".join(f"- ({(r.get('sec', '') + ' · ') if general else ''}{r['who']}) {r['text']}" for r in open_), language=None)
 
 
 ALERT_ABS = 3
@@ -3154,7 +3310,7 @@ def parent_view():
     for a in sorted([x for x in load("ann") if not x["until"] or x["until"] >= today()], key=lambda x: x["date"], reverse=True)[:5]:
         st.markdown(f'<div class="note"><b>إعلان</b> ({esc(a["date"])}): {esc(a["text"])}</div>', unsafe_allow_html=True)
     try:
-        _ww = week_winner()
+        _ww = week_winner(sk=SECKEY)
     except Exception:
         _ww = None
     if _ww and _ww["sid"]:
@@ -3347,6 +3503,30 @@ def parent_view():
 
 
 # ───────────────────────── صفحة المشايخ ─────────────────────────
+def _section_users(cfg):
+    if str(cfg.get("solo", "")).strip() in ("1", "true", "yes"):
+        return [str(cfg.get("user0", "")).lower()]
+    return [str(cfg.get(k, "")).lower() for k in ("user0", "user1", "user2")]
+
+
+def _find_user(u):
+    """وضع الأقسام المتعددة: القسم الذي ينتمي إليه اسم المستخدم، ومكانه بين شيوخه."""
+    for key, cfg in SECS.items():
+        us = _section_users(cfg)
+        if u and u in us:
+            return key, us.index(u)
+    return None, None
+
+
+def _hashes_for(key):
+    cfg = SECS[key]
+    base = _OSAMA_HASHES if str(cfg.get("seeded", "")).strip() in ("1", "true", "yes") else {}
+    try:
+        return {**base, **{str(k).lower(): v for k, v in dict(st.secrets["staff"]).items()}}
+    except Exception:
+        return dict(base)
+
+
 def login_view():
     header("تسجيل دخول المشايخ", basmala=True)
     with st.form("lf"):
@@ -3356,6 +3536,15 @@ def login_view():
     if ok:
         if blocked():
             st.error("محاولات كثيرة، حاول بعد قليل.")
+            return
+        if MULTI:
+            key, i = _find_user(u)
+            if key and sha(u, p) == _hashes_for(key).get(u):
+                st.session_state.sec_key = key
+                st.session_state.me = i
+                st.rerun()
+            note_fail()
+            st.error("اسم المستخدم أو الرمز السري غير صحيح")
             return
         i = next((k for k, t in enumerate(TEACHERS) if t["u"] == u), None)
         if i is not None and sha(u, p) == staff_hashes()[u]:
@@ -3420,11 +3609,29 @@ def student_tab(i):
     if not vis:
         st.caption("لا نتائج.")
         return
-    s = st.selectbox("الطالب", vis, format_func=lambda x: x["name"] + (f"  ·  م{x['grp']}" if x["grp"] else ""))
-    sid = s["id"]
-    s = next((x for x in students if x["id"] == sid), s)
+    _by = {x["id"]: x for x in vis}
+    sid = st.selectbox("الطالب", list(_by), format_func=lambda k: _by[k]["name"] + (f"  ·  م{_by[k]['grp']}" if _by[k]["grp"] else ""), key="stu_sel")
+    s = next((x for x in students if x["id"] == sid), _by[sid])
     _last, _n_mo, _n_all = visit_info(sid)
     st.caption(f"آخر زيارة للولي: {_last} · زياراته هذا الشهر: {_n_mo}" if _last else "لم يزر الولي صفحة ابنه بعد.")  # نسخة حديثة من بيانات الطالب (اختيار القائمة قد يحمل نسخة قديمة)
+
+    if admin:
+        with st.expander("تعديل اسم الطالب"):
+            with st.form(f"rn{sid}"):
+                nn = st.text_input("الاسم الصحيح", value=s["name"], max_chars=80, key=f"rnv{sid}_{s['name']}")
+                if st.form_submit_button("حفظ الاسم"):
+                    nn = " ".join(nn.split())
+                    if len(nn) < 2:
+                        st.error("اكتب اسما صحيحا.")
+                    elif nn == s["name"]:
+                        st.info("لم يتغير الاسم.")
+                    elif any(x["name"] == nn and x["id"] != sid for x in students):
+                        st.error("يوجد طالب بهذا الاسم، أضف ما يميّزه (مثل اسم الأب).")
+                    else:
+                        write(STORE.update, "students", sid, {"name": nn})
+                        audit("تعديل اسم طالب", f"{s['name']} ← {nn}")
+                        st.toast("✓ تم تعديل الاسم")
+                        st.rerun()
 
     is_h = me["t"] == "hifz"
     sec("تسجيل الحفظ" if is_h else "تسجيل المراجعة")
@@ -3640,7 +3847,7 @@ def student_tab(i):
             st.caption("رمز الولي (اضغط أيقونة النسخ على يمين الرمز):")
             st.code(s["pin"], language=None)
             msg = (f"السلام عليكم ورحمة الله،\nولي أمر الطالب {s['name']}\nرابط متابعة ابنكم في {ASSOC} "
-                   f"(يفتح مباشرة دون الحاجة إلى الرمز):\n{app.rstrip('/')}/?v=p&k={s['pin']}\n"
+                   f"(يفتح مباشرة دون الحاجة إلى الرمز):\n{app_link()}&k={s['pin']}\n"
                    f"وإن طُلب منكم الرمز فهو: {s['pin']}")
             st.link_button("إرسال لولي الأمر عبر واتساب", "https://wa.me/?text=" + urllib.parse.quote(msg))
         else:
@@ -4418,13 +4625,13 @@ def _prayer_calc(d):
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _prayer_api(day_iso):
+def _prayer_api(day_iso, ll=None):
     try:
         import json
         import urllib.request
         d = dt.date.fromisoformat(day_iso)
         url = (f"https://api.aladhan.com/v1/timings/{d.day:02d}-{d.month:02d}-{d.year}"
-               f"?latitude={ALGIERS[0]}&longitude={ALGIERS[1]}&method=19&timezonestring=Africa/Algiers")
+               f"?latitude={(ll or ALGIERS)[0]}&longitude={(ll or ALGIERS)[1]}&method=19&timezonestring=Africa/Algiers")
         with urllib.request.urlopen(url, timeout=4) as r:
             t = json.load(r)["data"]["timings"]
         return t["Maghrib"][:5], t["Isha"][:5]
@@ -4438,7 +4645,7 @@ def prayer_times(day_iso):
     if re.fullmatch(r"\d\d:\d\d,\d\d:\d\d", man or ""):
         a, b = man.split(",")
         return a, b, "ضُبطت يدويا"
-    api = _prayer_api(day_iso)
+    api = _prayer_api(day_iso, ALGIERS)
     if api:
         return api[0], api[1], "من الإنترنت (الجزائر العاصمة)"
     a, b = _prayer_calc(dt.date.fromisoformat(day_iso))
@@ -4512,9 +4719,9 @@ def staff_view(i):
     cn, ca = chat_unread(i)
     if cn:
         st.markdown(f'<div class="note">{"🔔 " if ca else ""}لديك {cn} رسالة جديدة من المشايخ' + (f" (منها {ca} تنبيه عاجل)" if ca else "") + '. افتح تبويب «المشايخ».</div>', unsafe_allow_html=True)
-    names = ["حلقة اليوم", "التقرير", "التسجيل", "الحضور", "الانضباط", "الرسائل"] + ([] if SOLO else [f"المشايخ ({cn})" if cn else "المشايخ"]) + (["ملخص الحلقة", "الإدارة"] if me.get("admin") else [])
+    names = ["حلقة اليوم", "التقرير", "التسجيل", "الحضور", "الانضباط", "الرسائل"] + ([] if SOLO else [f"المشايخ ({cn})" if cn else "المشايخ"]) + ["اقتراحات"] + (["ملخص الحلقة", "الإدارة"] if me.get("admin") else [])
     flash_show()
-    fns = [lambda: halaqa_tab(i), lambda: report_tab(i), lambda: student_tab(i), lambda: att_tab(i), lambda: disc_tab(i), lambda: msgs_tab(i)] + ([] if SOLO else [lambda: chat_tab(i)])
+    fns = [lambda: halaqa_tab(i), lambda: report_tab(i), lambda: student_tab(i), lambda: att_tab(i), lambda: disc_tab(i), lambda: msgs_tab(i)] + ([] if SOLO else [lambda: chat_tab(i)]) + [lambda: sug_tab(i)]
     if me.get("admin"):
         fns += [summary_tab, admin_tab]
     idx = list(range(len(names)))
@@ -4536,13 +4743,25 @@ def staff_view(i):
     if st.button("تسجيل الخروج"):
         st.session_state.me = None
         st.session_state.pop("staff_tab", None)
+        st.session_state.pop("sec_key", None)
+        st.session_state.pop("solo_role", None)
         st.rerun()
 
 
 # ───────────────────────── التشغيل ─────────────────────────
+def parent_picker():
+    header("متابعة الطالب", basmala=True)
+    sec("اختر القسم")
+    st.markdown('<div class="lead">اختر قسم ابنكم، ثم أدخلوا الرمز السري الذي أرسلته إليكم الإدارة.</div>', unsafe_allow_html=True)
+    for k, c in SECS.items():
+        if st.button(c.get("name", k), key=f"pk_{k}"):
+            st.query_params["s"] = k
+            st.rerun()
+
+
 if st.query_params.get("v") == "p":
-    parent_view()
-elif st.session_state.get("me") is not None:
+    parent_picker() if GENERIC else parent_view()
+elif st.session_state.get("me") is not None and not GENERIC:
     staff_view(st.session_state.me)
 else:
     login_view()
